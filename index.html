@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Focus Helper</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="login-screen">
+        <h2>Enter your name</h2>
+        <input type="text" id="username" placeholder="Your name">
+        <button id="enter-chat">Enter</button>
+    </div>
+
+    <div id="chat-screen" style="display: none;">
+        <div id="chat-header">
+            <h2>Focus Notes</h2>
+        </div>
+        <div id="chat-window"></div>
+        <input type="text" id="messageInput" placeholder="Type your message here...">
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>
