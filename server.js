@@ -10,9 +10,46 @@ const io = new Server(server);
 
 const PORT = process.env.PORT || 3000;
 const LOG_FILE = path.join(__dirname, 'misc.txt');
+const USERS_FILE = path.join(__dirname, 'Users.json');
 
-app.use(express.static(__dirname + '/public'));
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json());
 
+// Helper to get users
+function getUsers() {
+    if (!fs.existsSync(USERS_FILE)) return [];
+    try {
+        return JSON.parse(fs.readFileSync(USERS_FILE));
+    } catch {
+        return [];
+    }
+}
+
+// Helper to save users
+function saveUsers(users) {
+    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+}
+
+// Auth endpoint
+app.post('/auth', (req, res) => {
+    const { username, password } = req.body;
+    const users = getUsers();
+    const existing = users.find(u => u.username === username);
+
+    if (existing) {
+        if (existing.password === password) {
+            res.json({ success: true, message: 'Login successful' });
+        } else {
+            res.json({ success: false, message: 'Incorrect password' });
+        }
+    } else {
+        users.push({ username, password });
+        saveUsers(users);
+        res.json({ success: true, message: 'Account created' });
+    }
+});
+
+// WebSocket logic
 io.on('connection', (socket) => {
     console.log('New user connected');
 
@@ -29,7 +66,6 @@ io.on('connection', (socket) => {
     });
 
     socket.on('message_read', (data) => {
-        // Optional: log or emit message read event
         console.log(`${data.name} saw message at ${data.timestamp}`);
     });
 
