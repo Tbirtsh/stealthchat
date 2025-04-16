@@ -1,44 +1,39 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <title>Socket Chat</title>
-    <link rel="stylesheet" href="style.css">
+  <meta charset="UTF-8">
+  <title>ChatApp</title>
+  <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <!-- LOGIN SCREEN -->
-    <div id="loginScreen">
-        <h2>Login or Register</h2>
-        <input type="text" id="usernameInput" placeholder="Username">
-        <input type="password" id="passwordInput" placeholder="Password">
-        <button onclick="auth()">Enter</button>
-        <p id="loginStatus"></p>
+  <div id="auth">
+    <h2>Login / Register</h2>
+    <input type="text" id="username" placeholder="Username">
+    <input type="password" id="password" placeholder="Password">
+    <button onclick="register()">Register</button>
+    <button onclick="login()">Login</button>
+    <div id="auth-msg"></div>
+  </div>
+
+  <div id="chat-container" style="display: none;">
+    <div id="left-panel">
+      <h3>Users</h3>
+      <ul id="user-list"></ul>
     </div>
 
-    <!-- MAIN CHAT -->
-    <div id="chatScreen" style="display:none;">
-        <div class="sidebar" id="usersList">
-            <h3>Users</h3>
-        </div>
-
-        <div class="chat-area">
-            <div class="tabs">
-                <button onclick="switchToPublic()">Public Chat</button>
-                <span id="chatTitle">Public</span>
-            </div>
-            <div id="messages"></div>
-            <div class="input-area">
-                <input type="text" id="messageInput" placeholder="Type a message...">
-                <button onclick="sendMessage()">Send</button>
-            </div>
-        </div>
-
-        <div class="sidebar right" id="starredList">
-            <h3>Starred</h3>
-        </div>
+    <div id="chat-panel">
+      <div id="chat-log"></div>
+      <input type="text" id="chat-input" placeholder="Type a message">
+      <button onclick="sendMessage()">Send</button>
     </div>
 
-    <script src="/socket.io/socket.io.js"></script>
-    <script src="script.js"></script>
+    <div id="right-panel">
+      <h3>Starred</h3>
+      <ul id="starred-list"></ul>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="script.js"></script>
 </body>
 </html>
