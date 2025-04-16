@@ -1,41 +1,51 @@
-const socket = io();
-let name = "";
-const chatWindow = document.getElementById("chat-window");
-const msgInput = document.getElementById("messageInput");
-const enterChat = document.getElementById("enter-chat");
+let socket;
+let username = '';
 
-enterChat.onclick = () => {
-    const userInput = document.getElementById("username").value.trim();
-    if (userInput) {
-        name = userInput;
-        document.getElementById("login-screen").style.display = "none";
-        document.getElementById("chat-screen").style.display = "block";
-        socket.emit("user_joined", name);
-    }
-};
+function auth() {
+    username = document.getElementById('username').value;
+    const password = document.getElementById('password').value;
 
-msgInput.addEventListener("keypress", e => {
-    if (e.key === "Enter" && msgInput.value.trim()) {
-        const msg = msgInput.value.trim();
-        const timestamp = new Date().toLocaleTimeString();
-        socket.emit("message", { name, msg, timestamp });
-        msgInput.value = "";
-    }
-});
-
-socket.on("message", data => {
-    appendMessage(data);
-    socket.emit("message_read", data); // signal that message was seen
-});
-
-function appendMessage(data) {
-    const div = document.createElement("div");
-    div.classList.add("message");
-    div.innerHTML = `<b>${data.name}</b> <span class="timestamp">[${data.timestamp}]</span>: ${data.msg}`;
-    chatWindow.appendChild(div);
-    chatWindow.scrollTop = chatWindow.scrollHeight;
+    fetch('/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password })
+    })
+    .then(res => res.json())
+    .then(data => {
+        document.getElementById('authMsg').innerText = data.message;
+        if (data.success) {
+            document.getElementById('login').style.display = 'none';
+            document.getElementById('chat').style.display = 'block';
+            startSocket();
+        }
+    });
 }
 
-setInterval(() => {
-    chatWindow.innerHTML = "";
-}, 15 * 60 * 1000); // clear every 15 minutes
+function startSocket() {
+    socket = io();
+
+    socket.emit('user_joined', username);
+
+    document.getElementById('sendBtn').onclick = () => {
+        const input = document.getElementById('msgInput');
+        const msg = input.value;
+        input.value = '';
+        const data = {
+            name: username,
+            msg,
+            timestamp: new Date().toLocaleTimeString()
+        };
+        socket.emit('message', data);
+    };
+
+    socket.on('message', (data) => {
+        const el = document.createElement('div');
+        el.innerText = `[${data.timestamp}] ${data.name}: ${data.msg}`;
+        document.getElementById('chatBox').appendChild(el);
+    });
+
+    // Clear chat every 15 minutes on user-side only
+    setInterval(() => {
+        document.getElementById('chatBox').innerHTML = '';
+    }, 15 * 60 * 1000);
+}
