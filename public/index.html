@@ -2,23 +2,40 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Stealth Chat</title>
+    <title>Socket Chat</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div id="login">
-        <h2>Login / Register</h2>
-        <input type="text" id="username" placeholder="Username">
-        <input type="password" id="password" placeholder="Password">
+    <!-- LOGIN SCREEN -->
+    <div id="loginScreen">
+        <h2>Login or Register</h2>
+        <input type="text" id="usernameInput" placeholder="Username">
+        <input type="password" id="passwordInput" placeholder="Password">
         <button onclick="auth()">Enter</button>
-        <p id="authMsg"></p>
+        <p id="loginStatus"></p>
     </div>
 
-    <div id="chat" style="display: none;">
-        <h2>Stealth Chat</h2>
-        <div id="chatBox" class="chat-box"></div>
-        <input type="text" id="msgInput" placeholder="Type a message...">
-        <button id="sendBtn">Send</button>
+    <!-- MAIN CHAT -->
+    <div id="chatScreen" style="display:none;">
+        <div class="sidebar" id="usersList">
+            <h3>Users</h3>
+        </div>
+
+        <div class="chat-area">
+            <div class="tabs">
+                <button onclick="switchToPublic()">Public Chat</button>
+                <span id="chatTitle">Public</span>
+            </div>
+            <div id="messages"></div>
+            <div class="input-area">
+                <input type="text" id="messageInput" placeholder="Type a message...">
+                <button onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+
+        <div class="sidebar right" id="starredList">
+            <h3>Starred</h3>
+        </div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
