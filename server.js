@@ -11,45 +11,94 @@ const io = new Server(server);
 const PORT = process.env.PORT || 3000;
 const LOG_FILE = path.join(__dirname, 'misc.txt');
 const USERS_FILE = path.join(__dirname, 'Users.json');
+const THREADS_DIR = path.join(__dirname, 'threads');
 
-app.use(express.static(path.join(__dirname, 'public')));
+// Ensure threads dir exists
+if (!fs.existsSync(THREADS_DIR)) fs.mkdirSync(THREADS_DIR);
+
+app.use(express.static(__dirname + '/public'));
 app.use(express.json());
 
-// Helper to get users
-function getUsers() {
-    if (!fs.existsSync(USERS_FILE)) return [];
-    try {
-        return JSON.parse(fs.readFileSync(USERS_FILE));
-    } catch {
-        return [];
-    }
-}
-
-// Helper to save users
-function saveUsers(users) {
-    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-}
-
-// Auth endpoint
-app.post('/auth', (req, res) => {
+// ===== API: Register/Login =====
+app.post('/api/auth', (req, res) => {
     const { username, password } = req.body;
-    const users = getUsers();
-    const existing = users.find(u => u.username === username);
+    let users = [];
 
+    try {
+        users = JSON.parse(fs.readFileSync(USERS_FILE));
+    } catch { }
+
+    const existing = users.find(u => u.username === username);
     if (existing) {
         if (existing.password === password) {
-            res.json({ success: true, message: 'Login successful' });
+            return res.json({ success: true, user: existing });
         } else {
-            res.json({ success: false, message: 'Incorrect password' });
+            return res.status(403).json({ success: false, message: 'Wrong password' });
         }
     } else {
-        users.push({ username, password });
-        saveUsers(users);
-        res.json({ success: true, message: 'Account created' });
+        const newUser = { username, password, starred: [] };
+        users.push(newUser);
+        fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+        return res.json({ success: true, user: newUser });
     }
 });
 
-// WebSocket logic
+// ===== API: Get User List =====
+app.get('/api/users', (req, res) => {
+    let users = [];
+    try {
+        users = JSON.parse(fs.readFileSync(USERS_FILE));
+    } catch { }
+    res.json(users.map(u => ({ username: u.username })));
+});
+
+// ===== API: Star/Unstar =====
+app.post('/api/star', (req, res) => {
+    const { username, target, star } = req.body;
+    let users = [];
+
+    try {
+        users = JSON.parse(fs.readFileSync(USERS_FILE));
+    } catch { }
+
+    const user = users.find(u => u.username === username);
+    if (!user) return res.status(404).send();
+
+    user.starred = star
+        ? Array.from(new Set([...(user.starred || []), target]))
+        : (user.starred || []).filter(u => u !== target);
+
+    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+    res.sendStatus(200);
+});
+
+// ===== API: Fetch DM Thread =====
+app.get('/api/thread', (req, res) => {
+    const { user1, user2 } = req.query;
+    const file = threadFile(user1, user2);
+
+    if (!fs.existsSync(file)) return res.json([]);
+
+    const data = fs.readFileSync(file);
+    res.json(JSON.parse(data));
+});
+
+// ===== API: Send DM Message =====
+app.post('/api/thread', (req, res) => {
+    const { from, to, message, timestamp } = req.body;
+    const file = threadFile(from, to);
+
+    let thread = [];
+    try {
+        thread = JSON.parse(fs.readFileSync(file));
+    } catch { }
+
+    thread.push({ from, to, message, timestamp, read: false });
+    fs.writeFileSync(file, JSON.stringify(thread, null, 2));
+    res.sendStatus(200);
+});
+
+// ===== Socket.IO =====
 io.on('connection', (socket) => {
     console.log('New user connected');
 
@@ -57,22 +106,24 @@ io.on('connection', (socket) => {
         console.log(`${name} joined.`);
     });
 
-    socket.on('message', (data) => {
+    socket.on('public_message', (data) => {
         const line = `[${data.timestamp}] ${data.name}: ${data.msg}\n`;
-        fs.appendFile(LOG_FILE, line, (err) => {
+        fs.appendFile(LOG_FILE, line, err => {
             if (err) console.error("Error saving message:", err);
         });
-        io.emit('message', data);
-    });
-
-    socket.on('message_read', (data) => {
-        console.log(`${data.name} saw message at ${data.timestamp}`);
+        io.emit('public_message', data);
     });
 
     socket.on('disconnect', () => {
         console.log('User disconnected');
     });
 });
+
+// ===== Helpers =====
+function threadFile(user1, user2) {
+    const sorted = [user1, user2].sort().join('_');
+    return path.join(THREADS_DIR, `${sorted}.json`);
+}
 
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
