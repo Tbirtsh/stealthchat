@@ -2,22 +2,40 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Focus Helper</title>
+    <title>Socket Chat</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div id="login-screen">
-        <h2>Enter your name</h2>
-        <input type="text" id="username" placeholder="Your name">
-        <button id="enter-chat">Enter</button>
+    <!-- LOGIN SCREEN -->
+    <div id="loginScreen">
+        <h2>Login or Register</h2>
+        <input type="text" id="usernameInput" placeholder="Username">
+        <input type="password" id="passwordInput" placeholder="Password">
+        <button onclick="auth()">Enter</button>
+        <p id="loginStatus"></p>
     </div>
 
-    <div id="chat-screen" style="display: none;">
-        <div id="chat-header">
-            <h2>Focus Notes</h2>
+    <!-- MAIN CHAT -->
+    <div id="chatScreen" style="display:none;">
+        <div class="sidebar" id="usersList">
+            <h3>Users</h3>
         </div>
-        <div id="chat-window"></div>
-        <input type="text" id="messageInput" placeholder="Type your message here...">
+
+        <div class="chat-area">
+            <div class="tabs">
+                <button onclick="switchToPublic()">Public Chat</button>
+                <span id="chatTitle">Public</span>
+            </div>
+            <div id="messages"></div>
+            <div class="input-area">
+                <input type="text" id="messageInput" placeholder="Type a message...">
+                <button onclick="sendMessage()">Send</button>
+            </div>
+        </div>
+
+        <div class="sidebar right" id="starredList">
+            <h3>Starred</h3>
+        </div>
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
