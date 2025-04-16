@@ -3,127 +3,111 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { Server } = require('socket.io');
+const bodyParser = require('body-parser');
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server);
-
 const PORT = process.env.PORT || 3000;
-const LOG_FILE = path.join(__dirname, 'misc.txt');
-const USERS_FILE = path.join(__dirname, 'Users.json');
-const THREADS_DIR = path.join(__dirname, 'threads');
 
-// Ensure threads dir exists
-if (!fs.existsSync(THREADS_DIR)) fs.mkdirSync(THREADS_DIR);
+const USERS_FILE = path.join(__dirname, 'Users.json');
+const LOG_DIR = path.join(__dirname, 'logs');
+
+if (!fs.existsSync(USERS_FILE)) fs.writeFileSync(USERS_FILE, '{}');
+if (!fs.existsSync(LOG_DIR)) fs.mkdirSync(LOG_DIR);
 
 app.use(express.static(__dirname + '/public'));
-app.use(express.json());
+app.use(bodyParser.json());
 
-// ===== API: Register/Login =====
-app.post('/api/auth', (req, res) => {
+// Register
+app.post('/register', (req, res) => {
     const { username, password } = req.body;
-    let users = [];
+    const users = JSON.parse(fs.readFileSync(USERS_FILE));
 
-    try {
-        users = JSON.parse(fs.readFileSync(USERS_FILE));
-    } catch { }
+    if (users[username]) return res.status(400).json({ error: 'User already exists' });
 
-    const existing = users.find(u => u.username === username);
-    if (existing) {
-        if (existing.password === password) {
-            return res.json({ success: true, user: existing });
-        } else {
-            return res.status(403).json({ success: false, message: 'Wrong password' });
-        }
-    } else {
-        const newUser = { username, password, starred: [] };
-        users.push(newUser);
-        fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-        return res.json({ success: true, user: newUser });
-    }
-});
-
-// ===== API: Get User List =====
-app.get('/api/users', (req, res) => {
-    let users = [];
-    try {
-        users = JSON.parse(fs.readFileSync(USERS_FILE));
-    } catch { }
-    res.json(users.map(u => ({ username: u.username })));
-});
-
-// ===== API: Star/Unstar =====
-app.post('/api/star', (req, res) => {
-    const { username, target, star } = req.body;
-    let users = [];
-
-    try {
-        users = JSON.parse(fs.readFileSync(USERS_FILE));
-    } catch { }
-
-    const user = users.find(u => u.username === username);
-    if (!user) return res.status(404).send();
-
-    user.starred = star
-        ? Array.from(new Set([...(user.starred || []), target]))
-        : (user.starred || []).filter(u => u !== target);
-
+    users[username] = { password, starred: [] };
     fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
-    res.sendStatus(200);
+    return res.status(200).json({ success: true });
 });
 
-// ===== API: Fetch DM Thread =====
-app.get('/api/thread', (req, res) => {
-    const { user1, user2 } = req.query;
-    const file = threadFile(user1, user2);
+// Login
+app.post('/login', (req, res) => {
+    const { username, password } = req.body;
+    const users = JSON.parse(fs.readFileSync(USERS_FILE));
 
-    if (!fs.existsSync(file)) return res.json([]);
+    if (!users[username]) return res.status(404).json({ error: 'User not found' });
+    if (users[username].password !== password) return res.status(403).json({ error: 'Wrong password' });
 
-    const data = fs.readFileSync(file);
-    res.json(JSON.parse(data));
+    return res.status(200).json({ success: true });
 });
 
-// ===== API: Send DM Message =====
-app.post('/api/thread', (req, res) => {
-    const { from, to, message, timestamp } = req.body;
-    const file = threadFile(from, to);
+let onlineUsers = {};
 
-    let thread = [];
-    try {
-        thread = JSON.parse(fs.readFileSync(file));
-    } catch { }
-
-    thread.push({ from, to, message, timestamp, read: false });
-    fs.writeFileSync(file, JSON.stringify(thread, null, 2));
-    res.sendStatus(200);
-});
-
-// ===== Socket.IO =====
-io.on('connection', (socket) => {
-    console.log('New user connected');
-
-    socket.on('user_joined', (name) => {
-        console.log(`${name} joined.`);
+function logMessage(file, line) {
+    fs.appendFile(path.join(LOG_DIR, file), line, (err) => {
+        if (err) console.error(`Error saving to ${file}:`, err);
     });
+}
 
-    socket.on('public_message', (data) => {
-        const line = `[${data.timestamp}] ${data.name}: ${data.msg}\n`;
-        fs.appendFile(LOG_FILE, line, err => {
-            if (err) console.error("Error saving message:", err);
-        });
-        io.emit('public_message', data);
+function sortedThreadName(userA, userB) {
+    return [userA, userB].sort().join('_') + '.txt';
+}
+
+io.on('connection', (socket) => {
+    let currentUser = null;
+
+    socket.on('login', (username) => {
+        currentUser = username;
+        onlineUsers[username] = socket.id;
+        io.emit('users_update', Object.keys(onlineUsers));
     });
 
     socket.on('disconnect', () => {
-        console.log('User disconnected');
+        if (currentUser) {
+            delete onlineUsers[currentUser];
+            io.emit('users_update', Object.keys(onlineUsers));
+        }
+    });
+
+    // Public chat
+    socket.on('public_message', (data) => {
+        const timestamp = new Date().toLocaleTimeString();
+        const line = `[${timestamp}] ${data.name}: ${data.msg}\n`;
+        logMessage('public.txt', line);
+        io.emit('public_message', { ...data, timestamp });
+    });
+
+    // Private chat
+    socket.on('private_message', (data) => {
+        const { to, from, msg } = data;
+        const timestamp = new Date().toLocaleTimeString();
+        const line = `[${timestamp}] ${from} -> ${to}: ${msg}\n`;
+
+        const threadFile = sortedThreadName(to, from);
+        logMessage(threadFile, line);
+
+        if (onlineUsers[to]) {
+            io.to(onlineUsers[to]).emit('private_message', { from, msg, timestamp });
+        }
+        socket.emit('private_message', { from, msg, timestamp });
+    });
+
+    socket.on('star_user', ({ username, target }) => {
+        const users = JSON.parse(fs.readFileSync(USERS_FILE));
+        if (!users[username].starred.includes(target)) {
+            users[username].starred.push(target);
+        } else {
+            users[username].starred = users[username].starred.filter(name => name !== target);
+        }
+        fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+    });
+
+    socket.on('get_starred', (username, cb) => {
+        const users = JSON.parse(fs.readFileSync(USERS_FILE));
+        cb(users[username]?.starred || []);
     });
 });
-
-// ===== Helpers =====
-function threadFile(user1, user2) {
-    const sorted = [user1, user2].sort().join('_');
-    return path.join(THREADS_DIR, `${sorted}.json`);
-}
 
 server.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
